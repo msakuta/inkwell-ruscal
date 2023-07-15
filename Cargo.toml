@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm10-0"] }
+nom = "7.1.3"
+nom_locate = "4.1.0"
