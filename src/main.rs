@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -11,13 +13,17 @@ use nom::{
 use nom_locate::LocatedSpan;
 
 use inkwell::OptimizationLevel;
-use inkwell::{
-    builder::Builder,
-    context::Context,
-    values::{FloatMathValue, FloatValue},
-};
+use inkwell::{builder::Builder, context::Context, values::FloatValue};
 
 fn main() {
+    let mut buf = String::new();
+    if !std::io::stdin().read_to_string(&mut buf).is_ok() {
+        panic!("Failed to read from stdin");
+    }
+    build_program(&buf);
+}
+
+fn build_program(source: &str) {
     let context = Context::create();
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
@@ -39,7 +45,7 @@ fn main() {
     let builder = context.create_builder();
     builder.position_at_end(entry_basic_block);
     let hw_string_ptr = builder.build_global_string_ptr("Compiled: %f\n", "hw");
-    let ast = match num_expr(Span::new("40 + 2")) {
+    let ast = match num_expr(Span::new(source)) {
         Ok(val) => val.1,
         Err(e) => {
             eprintln!("Parse error: {e}");
