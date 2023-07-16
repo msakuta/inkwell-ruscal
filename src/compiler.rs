@@ -58,7 +58,7 @@ impl<'b, 'c> Compiler<'b, 'c, ()> {
     }
 }
 
-pub(crate) fn compile_fn_statement<'b, 'c>(compiler: &'c Compiler<'b, 'c, ()>, ast: &Statement)
+pub(crate) fn compile_fn_statement<'b, 'c>(compiler: &mut Compiler<'b, 'c, ()>, ast: &Statement)
 where
     'b: 'c,
 {
@@ -85,7 +85,7 @@ where
             let subcompiler = compiler.convert(&builder, arg_vals);
             let res = compile_expr(&subcompiler, expr);
             builder.build_return(Some(&res));
-            let mut user_functions = compiler.user_functions.borrow_mut();
+            let mut user_functions = RefCell::borrow_mut(&compiler.user_functions);
             user_functions.insert(name.to_string(), function);
         }
         _ => (),
@@ -93,7 +93,7 @@ where
 }
 
 pub(crate) fn compile_print_statement<'b, 'c>(
-    compiler: &'c Compiler<'b, 'c, Builder<'b>>,
+    compiler: &mut Compiler<'b, 'c, Builder<'b>>,
     ast: &Statement,
 ) where
     'b: 'c,
@@ -106,19 +106,23 @@ pub(crate) fn compile_print_statement<'b, 'c>(
                     .build_global_string_ptr("Compiled: %f\n", "hw")
             };
             let code = compile_expr(compiler, ex);
-            println!("Compiling build_call");
             compiler.builder.build_call(
                 *compiler.printf_function,
                 &[hw_string_ptr.as_pointer_value().into(), code.into()],
                 "call",
             );
         }
+        Statement::VarDef(name, ex) => {
+            let val = compile_expr(compiler, ex);
+            let varibales = &mut compiler.variables;
+            varibales.insert(name.to_string(), val);
+        }
         _ => (),
     }
 }
 
-fn compile_expr<'b, 'c, 'd: 'c>(
-    compiler: &'d Compiler<'b, 'c, Builder<'b>>,
+fn compile_expr<'b, 'c>(
+    compiler: &Compiler<'b, 'c, Builder<'b>>,
     ast: &Expression,
 ) -> FloatValue<'b>
 where

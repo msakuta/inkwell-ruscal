@@ -47,7 +47,7 @@ fn build_program(source: &str) {
 
     let user_functions = Rc::new(RefCell::new(HashMap::new()));
 
-    let compiler = Compiler::<()>::new(
+    let mut compiler = Compiler::<()>::new(
         &context,
         &module,
         &(),
@@ -56,7 +56,7 @@ fn build_program(source: &str) {
     );
 
     for stmt in &ast {
-        compile_fn_statement(&compiler, stmt);
+        compile_fn_statement(&mut compiler, stmt);
     }
 
     // Block
@@ -66,7 +66,7 @@ fn build_program(source: &str) {
     let builder = context.create_builder();
     builder.position_at_end(entry_basic_block);
 
-    let compiler = Compiler::<Builder>::new(
+    let mut compiler = Compiler::<Builder>::new(
         &context,
         &module,
         &builder,
@@ -75,7 +75,7 @@ fn build_program(source: &str) {
     );
 
     for stmt in &ast {
-        compile_print_statement(&compiler, stmt);
+        compile_print_statement(&mut compiler, stmt);
     }
 
     builder.build_return(Some(&i32_type.const_int(0, false)));
@@ -121,6 +121,7 @@ impl<'a> Expression<'a> {
 #[derive(Debug)]
 enum Statement<'src> {
     Expression(Expression<'src>),
+    VarDef(&'src str, Expression<'src>),
     FnDef {
         name: &'src str,
         args: Vec<&'src str>,

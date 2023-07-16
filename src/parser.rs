@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric1, char, multispace0},
+    character::complete::{alpha1, alphanumeric1, char, multispace0, multispace1},
     combinator::{opt, recognize},
     error::ParseError,
     multi::{fold_many0, many0, separated_list0},
@@ -123,6 +123,15 @@ fn num_expr(i: Span) -> IResult<Span, Expression> {
     res
 }
 
+fn var_def(i: Span) -> IResult<Span, Statement> {
+    let (i, _) = delimited(multispace0, tag("var"), multispace1)(i)?;
+    let (i, name) = space_delimited(identifier)(i)?;
+    let (i, _) = space_delimited(char('='))(i)?;
+    let (i, expr) = space_delimited(num_expr)(i)?;
+    let (i, _) = char(';')(i)?;
+    Ok((i, Statement::VarDef(*name, expr)))
+}
+
 fn open_brace(i: Span) -> IResult<Span, ()> {
     let (i, _) = space_delimited(char('{'))(i)?;
     Ok((i, ()))
@@ -156,7 +165,11 @@ fn expr_statement(i: Span) -> IResult<Span, Statement> {
 }
 
 fn statement(i: Span) -> IResult<Span, Statement> {
-    alt((fn_def_statement, terminated(expr_statement, char(';'))))(i)
+    alt((
+        fn_def_statement,
+        var_def,
+        terminated(expr_statement, char(';')),
+    ))(i)
 }
 
 fn statements(i: Span) -> IResult<Span, Statements> {
