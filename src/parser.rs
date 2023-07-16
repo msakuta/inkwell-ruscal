@@ -221,12 +221,15 @@ fn expr_statement(i: Span) -> IResult<Span, Statement> {
 
 fn for_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("for"))(i)?;
-    let (i, loop_var) = space_delimited(identifier)(i)?;
-    let (i, _) = space_delimited(tag("in"))(i)?;
-    let (i, start) = space_delimited(expr)(i)?;
-    let (i, _) = space_delimited(tag("to"))(i)?;
-    let (i, end) = space_delimited(expr)(i)?;
-    let (i, stmts) = delimited(open_brace, statements, close_brace)(i)?;
+    let (i, (loop_var, start, end, stmts)) = cut(|i| {
+        let (i, loop_var) = space_delimited(identifier)(i)?;
+        let (i, _) = space_delimited(tag("in"))(i)?;
+        let (i, start) = space_delimited(expr)(i)?;
+        let (i, _) = space_delimited(tag("to"))(i)?;
+        let (i, end) = space_delimited(expr)(i)?;
+        let (i, stmts) = delimited(open_brace, statements, close_brace)(i)?;
+        Ok((i, (loop_var, start, end, stmts)))
+    })(i)?;
     Ok((
         i,
         Statement::For {
