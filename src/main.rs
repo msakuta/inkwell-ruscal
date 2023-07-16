@@ -14,23 +14,63 @@ use crate::{
     parser::statements_finish,
 };
 
-fn main() {
+fn main() -> std::io::Result<()> {
+    let mut executable = None;
     let mut show_ast = false;
     let mut emit_llvm = false;
+    let mut src_file = None;
 
     for arg in std::env::args() {
-        println!("arg: {arg}");
+        if executable.is_none() {
+            executable = Some(arg.clone());
+            continue;
+        }
         match &arg as &str {
             "-a" => show_ast = true,
             "-e" => emit_llvm = true,
-            _ => (),
+            "-h" => {
+                eprintln!(
+                    r#"usage: {} [options] <source.rscl>
+
+Options:
+    -a    Show AST
+    -e    Emit LLVM IR to "out.ll"
+    -h    Show this message
+
+<source.rscl> can be a file name or "-" to get from standard input.
+"#,
+                    executable
+                        .as_ref()
+                        .map(AsRef::as_ref)
+                        .unwrap_or("inkwell-ruscal")
+                );
+                return Ok(());
+            }
+            src => src_file = Some(src.to_string()),
         }
     }
-    let mut buf = String::new();
-    if !std::io::stdin().read_to_string(&mut buf).is_ok() {
-        panic!("Failed to read from stdin");
-    }
-    build_program(&buf, show_ast, emit_llvm);
+
+    let src = if let Some("-") = src_file.as_ref().map(AsRef::as_ref) {
+        let mut buf = String::new();
+        if !std::io::stdin().read_to_string(&mut buf).is_ok() {
+            panic!("Failed to read from stdin");
+        }
+        buf
+    } else if let Some(src_file) = src_file {
+        std::fs::read_to_string(src_file)?
+    } else {
+        eprintln!(
+            "no input: see {} -h for help",
+            executable
+                .as_ref()
+                .map(AsRef::as_ref)
+                .unwrap_or("inkwell-ruscal")
+        );
+        return Ok(());
+    };
+
+    build_program(&src, show_ast, emit_llvm);
+    Ok(())
 }
 
 fn build_program(source: &str, show_ast: bool, emit_llvm: bool) {
