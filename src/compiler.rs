@@ -4,14 +4,21 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    values::{AnyValue, BasicValue, FloatValue, FunctionValue},
+    values::{AnyValue, BasicValue, FloatValue, FunctionValue, PointerValue},
     FloatPredicate,
 };
 
 use crate::{ExprEnum, Expression, Statement};
 
 pub(crate) type UserFunctions<'b> = Rc<RefCell<HashMap<String, FunctionValue<'b>>>>;
-pub(crate) type Variables<'b> = HashMap<String, FloatValue<'b>>;
+
+#[derive(Clone)]
+pub(crate) enum Variable<'b> {
+    Register(FloatValue<'b>),
+    Stack(PointerValue<'b>),
+}
+
+pub(crate) type Variables<'b> = HashMap<String, Variable<'b>>;
 
 #[derive(Clone)]
 pub(crate) struct Compiler<'b, 'c, F, B> {
@@ -53,7 +60,7 @@ impl<'b, 'c> Compiler<'b, 'c, (), ()> {
         &self,
         function: &'c FunctionValue<'b>,
         builder: &'c Builder<'b>,
-        variables: HashMap<String, FloatValue<'b>>,
+        variables: Variables<'b>,
     ) -> Compiler<'b, 'c, FunctionValue<'b>, Builder<'b>> {
         Compiler::<FunctionValue, Builder> {
             context: self.context,
@@ -132,7 +139,7 @@ where
                 .zip(
                     function
                         .get_param_iter()
-                        .map(|param| param.into_float_value()),
+                        .map(|param| Variable::Register(param.into_float_value())),
                 )
                 .collect();
             let mut subcompiler = compiler.convert(&function, &builder, arg_vals);
@@ -173,8 +180,22 @@ where
         }
         Statement::VarDef(name, ex) => {
             let val = compile_expr(compiler, ex);
+            let val_stack = compiler
+                .builder
+                .build_alloca(compiler.context.f64_type(), name);
+            compiler.builder.build_store(val_stack, val);
             let varibales = &mut compiler.variables;
-            varibales.insert(name.to_string(), val);
+            varibales.insert(name.to_string(), Variable::Stack(val_stack));
+            None
+        }
+        Statement::VarAssign(name, ex) => {
+            let val = compile_expr(compiler, ex);
+            let varibales = &mut compiler.variables;
+            let Variable::Stack(var_stack) = varibales.get(*name).expect("Variable exists") else {
+                panic!("Attempt to assign to a register variable; not permitted with LLVM SSA form")
+            };
+            compiler.builder.build_store(*var_stack, val);
+            varibales.insert(name.to_string(), Variable::Register(val));
             None
         }
         Statement::For {
@@ -214,7 +235,7 @@ where
                 .into_float_value();
             compiler
                 .variables
-                .insert(loop_var.to_string(), loop_var_reg);
+                .insert(loop_var.to_string(), Variable::Register(loop_var_reg));
             for stmt in stmts {
                 compile_expr_statement(compiler, stmt);
             }
@@ -259,7 +280,14 @@ where
     use ExprEnum::*;
     match &ast.expr {
         NumLiteral(val) => compiler.context.f64_type().const_float(*val),
-        Ident(id) => compiler.variables[*id],
+        Ident(id) => match compiler.variables[*id] {
+            Variable::Register(val) => val,
+            Variable::Stack(stk) => compiler
+                .builder
+                .build_load(stk, "stack-var")
+                .as_any_value_enum()
+                .into_float_value(),
+        },
         FnInvoke(name, args) => {
             let args: Vec<_> = args
                 .iter()

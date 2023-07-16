@@ -128,6 +128,13 @@ fn var_def(i: Span) -> IResult<Span, Statement> {
     Ok((i, Statement::VarDef(*name, expr)))
 }
 
+fn var_assign(i: Span) -> IResult<Span, Statement> {
+    let (i, name) = space_delimited(identifier)(i)?;
+    let (i, _) = space_delimited(char('='))(i)?;
+    let (i, expr) = space_delimited(expr)(i)?;
+    Ok((i, Statement::VarAssign(*name, expr)))
+}
+
 fn if_expr(i: Span) -> IResult<Span, Expression> {
     let i0 = i;
     let (i, _) = space_delimited(tag("if"))(i)?;
@@ -253,6 +260,7 @@ fn general_statement<'a>(last: bool) -> impl Fn(Span<'a>) -> IResult<Span<'a>, S
     move |input| {
         alt((
             var_def,
+            terminated(var_assign, terminator),
             fn_def_statement,
             for_statement,
             terminated(return_statement, terminator),
