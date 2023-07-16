@@ -1,0 +1,11 @@
+
+fn hundred(a) {
+    if a {
+        100
+    } else {
+        200
+    }
+}
+
+hundred(0);
+hundred(1);

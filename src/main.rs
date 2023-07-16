@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, io::Read, rc::Rc};
 
 use nom_locate::LocatedSpan;
 
-use inkwell::{builder::Builder, context::Context, OptimizationLevel};
+use inkwell::{builder::Builder, context::Context, values::FunctionValue, OptimizationLevel};
 
 use crate::{
     compiler::{compile_fn_statement, compile_print_statement, Compiler},
@@ -47,9 +47,10 @@ fn build_program(source: &str) {
 
     let user_functions = Rc::new(RefCell::new(HashMap::new()));
 
-    let mut compiler = Compiler::<()>::new(
+    let mut compiler = Compiler::<(), ()>::new(
         &context,
         &module,
+        &(),
         &(),
         &printf_function,
         user_functions.clone(),
@@ -66,9 +67,10 @@ fn build_program(source: &str) {
     let builder = context.create_builder();
     builder.position_at_end(entry_basic_block);
 
-    let mut compiler = Compiler::<Builder>::new(
+    let mut compiler = Compiler::<FunctionValue, Builder>::new(
         &context,
         &module,
+        &main_function,
         &builder,
         &printf_function,
         user_functions.clone(),
@@ -104,6 +106,11 @@ pub enum ExprEnum<'src> {
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
     Div(Box<Expression<'src>>, Box<Expression<'src>>),
+    If(
+        Box<Expression<'src>>,
+        Box<Expression<'src>>,
+        Option<Box<Expression<'src>>>,
+    ),
 }
 
 #[derive(Debug, PartialEq, Clone)]

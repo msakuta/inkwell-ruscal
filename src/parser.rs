@@ -6,7 +6,7 @@ use nom::{
     error::ParseError,
     multi::{fold_many0, many0, separated_list0},
     number::complete::recognize_float,
-    sequence::{delimited, pair, terminated},
+    sequence::{delimited, pair, preceded, terminated},
     Finish, IResult, InputTake, Offset, Parser,
 };
 
@@ -22,18 +22,14 @@ where
 }
 
 fn parens(i: Span) -> IResult<Span, Expression> {
-    space_delimited(delimited(tag("("), num_expr, tag(")")))(i)
+    space_delimited(delimited(tag("("), expr, tag(")")))(i)
 }
 
 fn func_call(i: Span) -> IResult<Span, Expression> {
     let (r, ident) = space_delimited(identifier)(i)?;
     let (r, args) = space_delimited(delimited(
         tag("("),
-        many0(delimited(
-            multispace0,
-            num_expr,
-            space_delimited(opt(tag(","))),
-        )),
+        many0(delimited(multispace0, expr, space_delimited(opt(tag(","))))),
         tag(")"),
     ))(r)?;
     Ok((
@@ -127,9 +123,32 @@ fn var_def(i: Span) -> IResult<Span, Statement> {
     let (i, _) = delimited(multispace0, tag("var"), multispace1)(i)?;
     let (i, name) = space_delimited(identifier)(i)?;
     let (i, _) = space_delimited(char('='))(i)?;
-    let (i, expr) = space_delimited(num_expr)(i)?;
+    let (i, expr) = space_delimited(expr)(i)?;
     let (i, _) = char(';')(i)?;
     Ok((i, Statement::VarDef(*name, expr)))
+}
+
+fn if_expr(i: Span) -> IResult<Span, Expression> {
+    let i0 = i;
+    let (i, _) = space_delimited(tag("if"))(i)?;
+    let (i, cond) = num_expr(i)?;
+    let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
+    let (i, f_case) = opt(preceded(
+        space_delimited(tag("else")),
+        delimited(open_brace, expr, close_brace),
+    ))(i)?;
+
+    Ok((
+        i,
+        Expression::new(
+            ExprEnum::If(Box::new(cond), Box::new(t_case), f_case.map(Box::new)),
+            calc_offset(i0, i),
+        ),
+    ))
+}
+
+fn expr(i: Span) -> IResult<Span, Expression> {
+    alt((if_expr, num_expr))(i)
 }
 
 fn open_brace(i: Span) -> IResult<Span, ()> {
@@ -160,7 +179,7 @@ fn fn_def_statement(i: Span) -> IResult<Span, Statement> {
 }
 
 fn expr_statement(i: Span) -> IResult<Span, Statement> {
-    let (i, res) = num_expr(i)?;
+    let (i, res) = expr(i)?;
     Ok((i, Statement::Expression(res)))
 }
 
