@@ -207,27 +207,31 @@ where
             compiler.builder.build_unconditional_branch(loop_bb);
 
             compiler.builder.position_at_end(loop_bb);
-            let loop_var_reg = compiler.builder.build_load(loop_var_ptr, "loop_var_load");
+            let loop_var_reg = compiler
+                .builder
+                .build_load(loop_var_ptr, "loop_var_load")
+                .as_any_value_enum()
+                .into_float_value();
+            compiler
+                .variables
+                .insert(loop_var.to_string(), loop_var_reg);
+            for stmt in stmts {
+                compile_expr_statement(compiler, stmt);
+            }
+            let cmp_value = compiler.builder.build_float_compare(
+                FloatPredicate::OLT,
+                loop_var_reg,
+                end_value,
+                "loopcond",
+            );
             let loop_var_incremented = compiler.builder.build_float_add(
-                loop_var_reg.as_any_value_enum().into_float_value(),
+                loop_var_reg,
                 compiler.context.f64_type().const_float(1.).into(),
                 "incr",
             );
             compiler
                 .builder
                 .build_store(loop_var_ptr, loop_var_incremented);
-            compiler
-                .variables
-                .insert(loop_var.to_string(), loop_var_incremented);
-            for stmt in stmts {
-                compile_expr_statement(compiler, stmt);
-            }
-            let cmp_value = compiler.builder.build_float_compare(
-                FloatPredicate::OLE,
-                loop_var_incremented,
-                end_value,
-                "loopcond",
-            );
             compiler
                 .builder
                 .build_conditional_branch(cmp_value, loop_bb, end_bb);
@@ -236,12 +240,17 @@ where
 
             None
         }
+        Statement::Return(ex) => {
+            let val = compile_expr(compiler, ex);
+            compiler.builder.build_return(Some(&val));
+            None
+        }
         _ => None,
     }
 }
 
 fn compile_expr<'b, 'c>(
-    compiler: &Compiler<'b, 'c, FunctionValue<'b>, Builder<'b>>,
+    compiler: &mut Compiler<'b, 'c, FunctionValue<'b>, Builder<'b>>,
     ast: &Expression,
 ) -> FloatValue<'b>
 where
@@ -341,7 +350,10 @@ where
                 .context
                 .append_basic_block(*compiler.function, "then_bb");
             compiler.builder.position_at_end(then_bb);
-            let then_block = compile_expr(compiler, t_case);
+            let then_block = t_case
+                .iter()
+                .fold(None, |_, cur| compile_expr_statement(compiler, cur))
+                .unwrap_or_else(|| compiler.context.f64_type().const_float(0.));
 
             let else_bb = compiler
                 .context
@@ -349,7 +361,11 @@ where
             compiler.builder.position_at_end(else_bb);
             let else_block = f_case
                 .as_ref()
-                .map(|f_case| compile_expr(compiler, &f_case))
+                .and_then(|f_case| {
+                    f_case
+                        .iter()
+                        .fold(None, |_, cur| compile_expr_statement(compiler, cur))
+                })
                 .unwrap_or_else(|| compiler.context.f64_type().const_float(0.));
             let else_bb_after = compiler.builder.get_insert_block().unwrap();
 

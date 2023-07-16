@@ -108,7 +108,7 @@ fn build_program(source: &str) {
 pub type Span<'a> = LocatedSpan<&'a str>;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ExprEnum<'src> {
+pub(crate) enum ExprEnum<'src> {
     NumLiteral(f64),
     Ident(&'src str),
     FnInvoke(&'src str, Vec<Expression<'src>>),
@@ -120,13 +120,13 @@ pub enum ExprEnum<'src> {
     Lt(Box<Expression<'src>>, Box<Expression<'src>>),
     If(
         Box<Expression<'src>>,
-        Box<Expression<'src>>,
-        Option<Box<Expression<'src>>>,
+        Box<Statements<'src>>,
+        Option<Box<Statements<'src>>>,
     ),
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Expression<'a> {
+pub(crate) struct Expression<'a> {
     pub(crate) expr: ExprEnum<'a>,
     pub(crate) span: Span<'a>,
 }
@@ -137,7 +137,7 @@ impl<'a> Expression<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 enum Statement<'src> {
     Expression(Expression<'src>),
     VarDef(&'src str, Expression<'src>),
@@ -152,6 +152,7 @@ enum Statement<'src> {
         args: Vec<&'src str>,
         stmts: Statements<'src>,
     },
+    Return(Expression<'src>),
 }
 
 type Statements<'a> = Vec<Statement<'a>>;
