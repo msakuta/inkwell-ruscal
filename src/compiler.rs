@@ -177,6 +177,65 @@ where
             varibales.insert(name.to_string(), val);
             None
         }
+        Statement::For {
+            loop_var,
+            start,
+            end,
+            stmts,
+        } => {
+            let cond_bb = compiler.builder.get_insert_block().unwrap_or_else(|| {
+                compiler
+                    .context
+                    .append_basic_block(*compiler.function, "cond_bb")
+            });
+
+            let loop_bb = compiler
+                .context
+                .append_basic_block(*compiler.function, "loop");
+            let end_bb = compiler
+                .context
+                .append_basic_block(*compiler.function, "endloop");
+
+            compiler.builder.position_at_end(cond_bb);
+            let start_value = compile_expr(compiler, start);
+            let end_value = compile_expr(compiler, end);
+            let loop_var_ptr = compiler
+                .builder
+                .build_alloca(compiler.context.f64_type(), loop_var);
+            compiler.builder.build_store(loop_var_ptr, start_value);
+
+            compiler.builder.build_unconditional_branch(loop_bb);
+
+            compiler.builder.position_at_end(loop_bb);
+            let loop_var_reg = compiler.builder.build_load(loop_var_ptr, "loop_var_load");
+            let loop_var_incremented = compiler.builder.build_float_add(
+                loop_var_reg.as_any_value_enum().into_float_value(),
+                compiler.context.f64_type().const_float(1.).into(),
+                "incr",
+            );
+            compiler
+                .builder
+                .build_store(loop_var_ptr, loop_var_incremented);
+            compiler
+                .variables
+                .insert(loop_var.to_string(), loop_var_incremented);
+            for stmt in stmts {
+                compile_expr_statement(compiler, stmt);
+            }
+            let cmp_value = compiler.builder.build_float_compare(
+                FloatPredicate::OLE,
+                loop_var_incremented,
+                end_value,
+                "loopcond",
+            );
+            compiler
+                .builder
+                .build_conditional_branch(cmp_value, loop_bb, end_bb);
+
+            compiler.builder.position_at_end(end_bb);
+
+            None
+        }
         _ => None,
     }
 }

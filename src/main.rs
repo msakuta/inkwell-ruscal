@@ -141,6 +141,12 @@ impl<'a> Expression<'a> {
 enum Statement<'src> {
     Expression(Expression<'src>),
     VarDef(&'src str, Expression<'src>),
+    For {
+        loop_var: &'src str,
+        start: Expression<'src>,
+        end: Expression<'src>,
+        stmts: Statements<'src>,
+    },
     FnDef {
         name: &'src str,
         args: Vec<&'src str>,
