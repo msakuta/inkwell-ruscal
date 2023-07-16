@@ -135,7 +135,7 @@ fn if_expr(i: Span) -> IResult<Span, Expression> {
     let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
     let (i, f_case) = opt(preceded(
         space_delimited(tag("else")),
-        delimited(open_brace, expr, close_brace),
+        alt((delimited(open_brace, expr, close_brace), if_expr)),
     ))(i)?;
 
     Ok((

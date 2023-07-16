@@ -263,6 +263,7 @@ where
                 .as_ref()
                 .map(|f_case| compile_expr(compiler, &f_case))
                 .unwrap_or_else(|| compiler.context.f64_type().const_float(0.));
+            let else_bb_after = compiler.builder.get_insert_block().unwrap();
 
             compiler.builder.position_at_end(cond_bb);
             compiler
@@ -275,14 +276,14 @@ where
             compiler.builder.position_at_end(then_bb);
             compiler.builder.build_unconditional_branch(end_bb);
 
-            compiler.builder.position_at_end(else_bb);
+            compiler.builder.position_at_end(else_bb_after);
             compiler.builder.build_unconditional_branch(end_bb);
 
             compiler.builder.position_at_end(end_bb);
             let phi_value = compiler
                 .builder
                 .build_phi(compiler.context.f64_type(), "phi");
-            phi_value.add_incoming(&[(&then_block, then_bb), (&else_block, else_bb)]);
+            phi_value.add_incoming(&[(&then_block, then_bb), (&else_block, else_bb_after)]);
             let res = phi_value.as_any_value_enum().into_float_value();
             res
         }
