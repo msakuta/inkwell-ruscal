@@ -16,11 +16,13 @@ use crate::{
 
 fn main() {
     let mut show_ast = false;
+    let mut emit_llvm = false;
 
     for arg in std::env::args() {
         println!("arg: {arg}");
         match &arg as &str {
             "-a" => show_ast = true,
+            "-e" => emit_llvm = true,
             _ => (),
         }
     }
@@ -28,10 +30,10 @@ fn main() {
     if !std::io::stdin().read_to_string(&mut buf).is_ok() {
         panic!("Failed to read from stdin");
     }
-    build_program(&buf, show_ast);
+    build_program(&buf, show_ast, emit_llvm);
 }
 
-fn build_program(source: &str, show_ast: bool) {
+fn build_program(source: &str, show_ast: bool, emit_llvm: bool) {
     let context = Context::create();
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
@@ -103,7 +105,9 @@ fn build_program(source: &str, show_ast: bool) {
 
     builder.build_return(Some(&i32_type.const_int(0, false)));
 
-    module.print_to_file("out.ll").unwrap();
+    if emit_llvm {
+        module.print_to_file("out.ll").unwrap();
+    }
 
     let execution_engine = module
         .create_jit_execution_engine(OptimizationLevel::Aggressive)
