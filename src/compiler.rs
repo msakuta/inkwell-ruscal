@@ -4,7 +4,7 @@ use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
-    values::{FloatValue, FunctionValue},
+    values::{BasicValue, FloatValue, FunctionValue},
 };
 
 use crate::{ExprEnum, Expression, Statement};
@@ -58,12 +58,15 @@ impl<'b, 'c> Compiler<'b, 'c, ()> {
     }
 }
 
+/// The first pass will compile the function definitions, while expression statements are skipped.
+/// This is because (apparently) LLVM segfaults when you try to run multiple builders at once,
+/// even in safe Rust.
 pub(crate) fn compile_fn_statement<'b, 'c>(compiler: &mut Compiler<'b, 'c, ()>, ast: &Statement)
 where
     'b: 'c,
 {
     match ast {
-        Statement::FnDef { name, args, expr } => {
+        Statement::FnDef { name, args, stmts } => {
             let args_ty: Vec<_> = args
                 .iter()
                 .map(|_| compiler.context.f64_type().into())
@@ -82,9 +85,12 @@ where
                         .map(|param| param.into_float_value()),
                 )
                 .collect();
-            let subcompiler = compiler.convert(&builder, arg_vals);
-            let res = compile_expr(&subcompiler, expr);
-            builder.build_return(Some(&res));
+            let mut subcompiler = compiler.convert(&builder, arg_vals);
+            let mut res = None;
+            for stmt in stmts.iter() {
+                res = compile_print_statement(&mut subcompiler, stmt);
+            }
+            builder.build_return(res.as_ref().map(|res| res as &dyn BasicValue));
             let mut user_functions = RefCell::borrow_mut(&compiler.user_functions);
             user_functions.insert(name.to_string(), function);
         }
@@ -92,10 +98,12 @@ where
     }
 }
 
+/// The second pass compiles expressions, skipping function definitions.
 pub(crate) fn compile_print_statement<'b, 'c>(
     compiler: &mut Compiler<'b, 'c, Builder<'b>>,
     ast: &Statement,
-) where
+) -> Option<FloatValue<'b>>
+where
     'b: 'c,
 {
     match ast {
@@ -111,13 +119,15 @@ pub(crate) fn compile_print_statement<'b, 'c>(
                 &[hw_string_ptr.as_pointer_value().into(), code.into()],
                 "call",
             );
+            Some(code)
         }
         Statement::VarDef(name, ex) => {
             let val = compile_expr(compiler, ex);
             let varibales = &mut compiler.variables;
             varibales.insert(name.to_string(), val);
+            None
         }
-        _ => (),
+        _ => None,
     }
 }
 

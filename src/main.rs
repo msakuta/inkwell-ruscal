@@ -125,7 +125,7 @@ enum Statement<'src> {
     FnDef {
         name: &'src str,
         args: Vec<&'src str>,
-        expr: Expression<'src>,
+        stmts: Statements<'src>,
     },
 }
 

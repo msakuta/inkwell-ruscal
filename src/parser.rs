@@ -148,13 +148,13 @@ fn fn_def_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("("))(i)?;
     let (i, args) = separated_list0(char(','), space_delimited(identifier))(i)?;
     let (i, _) = space_delimited(tag(")"))(i)?;
-    let (i, expr) = delimited(open_brace, num_expr, close_brace)(i)?;
+    let (i, stmts) = delimited(open_brace, statements, close_brace)(i)?;
     Ok((
         i,
         Statement::FnDef {
             name: *name,
             args: args.into_iter().map(|arg| *arg).collect(),
-            expr,
+            stmts,
         },
     ))
 }
@@ -164,17 +164,39 @@ fn expr_statement(i: Span) -> IResult<Span, Statement> {
     Ok((i, Statement::Expression(res)))
 }
 
-fn statement(i: Span) -> IResult<Span, Statement> {
-    alt((
-        fn_def_statement,
-        var_def,
-        terminated(expr_statement, char(';')),
-    ))(i)
+fn general_statement<'a>(last: bool) -> impl Fn(Span<'a>) -> IResult<Span<'a>, Statement> {
+    let terminator = move |i| -> IResult<Span<'a>, ()> {
+        let mut semicolon = pair(tag(";"), multispace0);
+        if last {
+            Ok((opt(semicolon)(i)?.0, ()))
+        } else {
+            Ok((semicolon(i)?.0, ()))
+        }
+    };
+    move |input| {
+        alt((
+            var_def,
+            fn_def_statement,
+            terminated(expr_statement, terminator),
+        ))(input)
+    }
+}
+
+pub(crate) fn last_statement(input: Span) -> IResult<Span, Statement> {
+    general_statement(true)(input)
+}
+
+pub(crate) fn statement(input: Span) -> IResult<Span, Statement> {
+    general_statement(false)(input)
 }
 
 fn statements(i: Span) -> IResult<Span, Statements> {
-    let (i, stmts) = many0(statement)(i)?;
-    let (i, _) = opt(char(';'))(i)?;
+    let (i, mut stmts) = many0(statement)(i)?;
+    let (i, last) = opt(last_statement)(i)?;
+    let (i, _) = opt(multispace0)(i)?;
+    if let Some(last) = last {
+        stmts.push(last);
+    }
     Ok((i, stmts))
 }
 
