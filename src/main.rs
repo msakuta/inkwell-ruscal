@@ -15,14 +15,23 @@ use crate::{
 };
 
 fn main() {
+    let mut show_ast = false;
+
+    for arg in std::env::args() {
+        println!("arg: {arg}");
+        match &arg as &str {
+            "-a" => show_ast = true,
+            _ => (),
+        }
+    }
     let mut buf = String::new();
     if !std::io::stdin().read_to_string(&mut buf).is_ok() {
         panic!("Failed to read from stdin");
     }
-    build_program(&buf);
+    build_program(&buf, show_ast);
 }
 
-fn build_program(source: &str) {
+fn build_program(source: &str, show_ast: bool) {
     let context = Context::create();
     let i32_type = context.i32_type();
     let i8_type = context.i8_type();
@@ -47,7 +56,9 @@ fn build_program(source: &str) {
         }
     };
 
-    dbg!(&ast);
+    if show_ast {
+        println!("AST: {ast:?}");
+    }
 
     let user_functions = HashMap::new();
     let user_functions = Rc::new(RefCell::new(user_functions));
