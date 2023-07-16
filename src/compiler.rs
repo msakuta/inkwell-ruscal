@@ -181,6 +181,32 @@ where
             let rhs = compile_expr(compiler, &rhs);
             compiler.builder.build_float_div(lhs, rhs, "div")
         }
+        Lt(lhs, rhs) => {
+            let lhs = compile_expr(compiler, &lhs);
+            let rhs = compile_expr(compiler, &rhs);
+            let cmp =
+                compiler
+                    .builder
+                    .build_float_compare(FloatPredicate::OLT, lhs, rhs, "comp.lt");
+            compiler.builder.build_unsigned_int_to_float(
+                cmp,
+                compiler.context.f64_type(),
+                "cmp.f64",
+            )
+        }
+        Gt(lhs, rhs) => {
+            let lhs = compile_expr(compiler, &lhs);
+            let rhs = compile_expr(compiler, &rhs);
+            let cmp =
+                compiler
+                    .builder
+                    .build_float_compare(FloatPredicate::OGT, lhs, rhs, "comp.gt");
+            compiler.builder.build_unsigned_int_to_float(
+                cmp,
+                compiler.context.f64_type(),
+                "cmp.f64",
+            )
+        }
         If(cond, t_case, f_case) => {
             // let string_ptr = {
             //     compiler
@@ -202,7 +228,7 @@ where
             compiler.builder.position_at_end(cond_bb);
             let cond_value = compile_expr(compiler, cond);
             let cond = compiler.builder.build_float_compare(
-                FloatPredicate::UEQ,
+                FloatPredicate::ONE,
                 cond_value,
                 compiler.context.f64_type().const_zero(),
                 "cond-cmp",

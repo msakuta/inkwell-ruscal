@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric1, char, multispace0, multispace1},
-    combinator::{opt, recognize},
+    combinator::{cut, opt, recognize},
     error::ParseError,
     multi::{fold_many0, many0, separated_list0},
     number::complete::recognize_float,
@@ -131,7 +131,7 @@ fn var_def(i: Span) -> IResult<Span, Statement> {
 fn if_expr(i: Span) -> IResult<Span, Expression> {
     let i0 = i;
     let (i, _) = space_delimited(tag("if"))(i)?;
-    let (i, cond) = num_expr(i)?;
+    let (i, cond) = expr(i)?;
     let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
     let (i, f_case) = opt(preceded(
         space_delimited(tag("else")),
@@ -148,7 +148,23 @@ fn if_expr(i: Span) -> IResult<Span, Expression> {
 }
 
 fn expr(i: Span) -> IResult<Span, Expression> {
-    alt((if_expr, num_expr))(i)
+    alt((if_expr, cond_expr, num_expr))(i)
+}
+
+fn cond_expr(i: Span) -> IResult<Span, Expression> {
+    let i0 = i;
+    let (i, first) = num_expr(i)?;
+    let (i, cond) = space_delimited(alt((char('<'), char('>'))))(i)?;
+    let (i, second) = num_expr(i)?;
+    let span = calc_offset(i0, i);
+    Ok((
+        i,
+        match cond {
+            '<' => Expression::new(ExprEnum::Lt(Box::new(first), Box::new(second)), span),
+            '>' => Expression::new(ExprEnum::Gt(Box::new(first), Box::new(second)), span),
+            _ => unreachable!(),
+        },
+    ))
 }
 
 fn open_brace(i: Span) -> IResult<Span, ()> {
@@ -163,11 +179,14 @@ fn close_brace(i: Span) -> IResult<Span, ()> {
 
 fn fn_def_statement(i: Span) -> IResult<Span, Statement> {
     let (i, _) = space_delimited(tag("fn"))(i)?;
-    let (i, name) = space_delimited(identifier)(i)?;
-    let (i, _) = space_delimited(tag("("))(i)?;
-    let (i, args) = separated_list0(char(','), space_delimited(identifier))(i)?;
-    let (i, _) = space_delimited(tag(")"))(i)?;
-    let (i, stmts) = delimited(open_brace, statements, close_brace)(i)?;
+    let (i, (name, args, stmts)) = cut(|i| {
+        let (i, name) = space_delimited(identifier)(i)?;
+        let (i, _) = space_delimited(tag("("))(i)?;
+        let (i, args) = separated_list0(char(','), space_delimited(identifier))(i)?;
+        let (i, _) = space_delimited(tag(")"))(i)?;
+        let (i, stmts) = delimited(open_brace, statements, close_brace)(i)?;
+        Ok((i, (name, args, stmts)))
+    })(i)?;
     Ok((
         i,
         Statement::FnDef {
