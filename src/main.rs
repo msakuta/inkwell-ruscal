@@ -36,16 +36,22 @@ struct Compiler<'b, 'c, B> {
     builder: &'c B,
     printf_function: &'c FunctionValue<'b>,
     user_functions: Rc<RefCell<HashMap<String, FunctionValue<'b>>>>,
+    variables: HashMap<String, FloatValue<'b>>,
 }
 
 impl<'b, 'c> Compiler<'b, 'c, ()> {
-    fn convert(&self, builder: &'c Builder<'b>) -> Compiler<'b, 'c, Builder<'b>> {
+    fn convert(
+        &self,
+        builder: &'c Builder<'b>,
+        variables: HashMap<String, FloatValue<'b>>,
+    ) -> Compiler<'b, 'c, Builder<'b>> {
         Compiler::<Builder> {
             context: self.context,
             module: self.module,
             builder,
             printf_function: self.printf_function,
             user_functions: self.user_functions.clone(),
+            variables,
         }
     }
 }
@@ -83,6 +89,7 @@ fn build_program(source: &str) {
         builder: &(),
         printf_function: &printf_function,
         user_functions: user_functions.clone(),
+        variables: HashMap::new(),
     };
 
     for stmt in &ast {
@@ -102,6 +109,7 @@ fn build_program(source: &str) {
         builder: &builder,
         printf_function: &printf_function,
         user_functions: user_functions.clone(),
+        variables: HashMap::new(),
     };
 
     for stmt in &ast {
@@ -128,18 +136,28 @@ where
     'b: 'c,
 {
     match ast {
-        Statement::FnDef { name, expr, .. } => {
-            let fn_type = compiler.context.f64_type().fn_type(&[], false);
+        Statement::FnDef { name, args, expr } => {
+            let args_ty: Vec<_> = args
+                .iter()
+                .map(|_| compiler.context.f64_type().into())
+                .collect();
+            let fn_type = compiler.context.f64_type().fn_type(&args_ty, false);
             let function = compiler.module.add_function(name, fn_type, None);
             let entry_basic_block = compiler.context.append_basic_block(function, name);
-            println!("Can I build multiple builders?");
             let builder = compiler.context.create_builder();
-            println!("No?");
             builder.position_at_end(entry_basic_block);
-            let subcompiler = compiler.convert(&builder);
+            let arg_vals: HashMap<_, _> = args
+                .iter()
+                .map(|arg| arg.to_string())
+                .zip(
+                    function
+                        .get_param_iter()
+                        .map(|param| param.into_float_value()),
+                )
+                .collect();
+            let subcompiler = compiler.convert(&builder, arg_vals);
             let res = compile_expr(&subcompiler, expr);
             builder.build_return(Some(&res));
-            println!("No???");
             let mut user_functions = compiler.user_functions.borrow_mut();
             user_functions.insert(name.to_string(), function);
         }
@@ -180,12 +198,17 @@ where
     use ExprEnum::*;
     match &ast.expr {
         NumLiteral(val) => compiler.context.f64_type().const_float(*val),
-        FnInvoke(name, _ex) => {
+        Ident(id) => compiler.variables[*id],
+        FnInvoke(name, args) => {
+            let args: Vec<_> = args
+                .iter()
+                .map(|arg| compile_expr(compiler, arg).into())
+                .collect();
             let user_functions = compiler.user_functions.borrow();
             println!("user_functions: {:?}", *user_functions);
             let retval = compiler
                 .builder
-                .build_call(user_functions[*name], &[], name);
+                .build_call(user_functions[*name], &args, name);
             let bv = retval.try_as_basic_value().unwrap_left();
             bv.into_float_value()
         }
@@ -217,6 +240,7 @@ pub type Span<'a> = LocatedSpan<&'a str>;
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExprEnum<'src> {
     NumLiteral(f64),
+    Ident(&'src str),
     FnInvoke(&'src str, Vec<Expression<'src>>),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -278,6 +302,14 @@ fn func_call(i: Span) -> IResult<Span, Expression> {
     ))
 }
 
+fn ident(input: Span) -> IResult<Span, Expression> {
+    let (r, res) = space_delimited(identifier)(input)?;
+    Ok((
+        r,
+        Expression::new(ExprEnum::Ident(*res), calc_offset(input, r)),
+    ))
+}
+
 fn identifier(input: Span) -> IResult<Span, Span> {
     recognize(pair(
         alt((alpha1, tag("_"))),
@@ -309,7 +341,7 @@ pub(crate) fn calc_offset<'a>(i: Span<'a>, r: Span<'a>) -> Span<'a> {
 }
 
 fn factor(i: Span) -> IResult<Span, Expression> {
-    alt((num_literal, func_call, parens))(i)
+    alt((num_literal, func_call, ident, parens))(i)
 }
 
 fn term(i: Span) -> IResult<Span, Expression> {
