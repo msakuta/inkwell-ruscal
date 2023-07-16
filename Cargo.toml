@@ -1,5 +1,5 @@
 [package]
-name = "llvmenv-test"
+name = "inkwell-ruscal"
 version = "0.1.0"
 edition = "2021"
 
