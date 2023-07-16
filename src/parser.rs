@@ -131,12 +131,15 @@ fn var_def(i: Span) -> IResult<Span, Statement> {
 fn if_expr(i: Span) -> IResult<Span, Expression> {
     let i0 = i;
     let (i, _) = space_delimited(tag("if"))(i)?;
-    let (i, cond) = expr(i)?;
-    let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
-    let (i, f_case) = opt(preceded(
-        space_delimited(tag("else")),
-        alt((delimited(open_brace, expr, close_brace), if_expr)),
-    ))(i)?;
+    let (i, (cond, t_case, f_case)) = cut(|i| {
+        let (i, cond) = expr(i)?;
+        let (i, t_case) = delimited(open_brace, expr, close_brace)(i)?;
+        let (i, f_case) = opt(preceded(
+            space_delimited(tag("else")),
+            alt((delimited(open_brace, expr, close_brace), if_expr)),
+        ))(i)?;
+        Ok((i, (cond, t_case, f_case)))
+    })(i)?;
 
     Ok((
         i,

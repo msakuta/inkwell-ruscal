@@ -20,6 +20,7 @@ pub(crate) struct Compiler<'b, 'c, F, B> {
     function: &'c F,
     builder: &'c B,
     printf_function: &'c FunctionValue<'b>,
+    putchar_function: &'c FunctionValue<'b>,
     user_functions: UserFunctions<'b>,
     variables: Variables<'b>,
 }
@@ -31,14 +32,16 @@ impl<'b, 'c, F, B> Compiler<'b, 'c, F, B> {
         function: &'c F,
         builder: &'c B,
         printf_function: &'c FunctionValue<'b>,
+        putchar_function: &'c FunctionValue<'b>,
         user_functions: UserFunctions<'b>,
     ) -> Self {
         Self {
-            context: &context,
-            module: &module,
-            function: &function,
-            builder: &builder,
-            printf_function: &printf_function,
+            context,
+            module,
+            function,
+            builder,
+            printf_function,
+            putchar_function,
             user_functions: user_functions.clone(),
             variables: HashMap::new(),
         }
@@ -58,14 +61,21 @@ impl<'b, 'c> Compiler<'b, 'c, (), ()> {
             function,
             builder,
             printf_function: self.printf_function,
+            putchar_function: self.putchar_function,
             user_functions: self.user_functions.clone(),
             variables,
         }
     }
 }
 
-pub(crate) fn compile_print<'b, 'c>(compiler: &mut Compiler<'b, 'c, (), ()>) {
-    let function = compiler.user_functions.borrow()["print"];
+pub(crate) fn compile_print<'b, 'c>(compiler: &mut Compiler<'b, 'c, (), ()>) -> FunctionValue<'b> {
+    let f64_type = compiler.context.f64_type();
+    let print_fn_type = f64_type.fn_type(&[f64_type.into()], false);
+    let function = compiler.module.add_function("print", print_fn_type, None);
+    compiler
+        .user_functions
+        .borrow_mut()
+        .insert("print".to_string(), function);
     let entry_basic_block = compiler.context.append_basic_block(function, "entry");
     let builder = compiler.context.create_builder();
     builder.position_at_end(entry_basic_block);
@@ -77,6 +87,25 @@ pub(crate) fn compile_print<'b, 'c>(compiler: &mut Compiler<'b, 'c, (), ()>) {
         "call",
     );
     builder.build_return(None);
+    function
+}
+
+pub(crate) fn compile_putc<'b, 'c>(compiler: &mut Compiler<'b, 'c, (), ()>) -> FunctionValue<'b> {
+    let f64_type = compiler.context.f64_type();
+    let print_fn_type = f64_type.fn_type(&[f64_type.into()], false);
+    let function = compiler.module.add_function("putc", print_fn_type, None);
+    compiler
+        .user_functions
+        .borrow_mut()
+        .insert("putc".to_string(), function);
+    let entry_basic_block = compiler.context.append_basic_block(function, "entry");
+    let builder = compiler.context.create_builder();
+    builder.position_at_end(entry_basic_block);
+    let arg = function.get_first_param().unwrap().into_float_value();
+    let arg = builder.build_float_to_signed_int(arg, compiler.context.i8_type(), "to-char");
+    builder.build_call(*compiler.putchar_function, &[arg.into()], "call");
+    builder.build_return(None);
+    function
 }
 
 /// The first pass will compile the function definitions, while expression statements are skipped.

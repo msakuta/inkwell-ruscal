@@ -8,7 +8,9 @@ use nom_locate::LocatedSpan;
 use inkwell::{builder::Builder, context::Context, values::FunctionValue, OptimizationLevel};
 
 use crate::{
-    compiler::{compile_expr_statement, compile_fn_statement, compile_print, Compiler},
+    compiler::{
+        compile_expr_statement, compile_fn_statement, compile_print, compile_putc, Compiler,
+    },
     parser::statements_finish,
 };
 
@@ -23,7 +25,6 @@ fn main() {
 fn build_program(source: &str) {
     let context = Context::create();
     let i32_type = context.i32_type();
-    let f64_type = context.f64_type();
     let i8_type = context.i8_type();
     let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::Generic);
 
@@ -33,8 +34,8 @@ fn build_program(source: &str) {
     // Function
     let printf_fn_type = i32_type.fn_type(&[i8_ptr_type.into()], true);
     let printf_function = module.add_function("printf", printf_fn_type, None);
-    let print_fn_type = f64_type.fn_type(&[f64_type.into()], false);
-    let print_function = module.add_function("print", print_fn_type, None);
+    let putchar_fn_type = i32_type.fn_type(&[i8_type.into()], false);
+    let putchar_function = module.add_function("putchar", putchar_fn_type, None);
     let main_fn_type = i32_type.fn_type(&[], false);
     let main_function = module.add_function("main", main_fn_type, None);
 
@@ -48,9 +49,7 @@ fn build_program(source: &str) {
 
     dbg!(&ast);
 
-    let mut user_functions = HashMap::new();
-    user_functions.insert("print".to_string(), print_function);
-
+    let user_functions = HashMap::new();
     let user_functions = Rc::new(RefCell::new(user_functions));
 
     let mut compiler = Compiler::<(), ()>::new(
@@ -59,10 +58,12 @@ fn build_program(source: &str) {
         &(),
         &(),
         &printf_function,
+        &putchar_function,
         user_functions.clone(),
     );
 
     compile_print(&mut compiler);
+    compile_putc(&mut compiler);
 
     for stmt in &ast {
         compile_fn_statement(&mut compiler, stmt);
@@ -81,6 +82,7 @@ fn build_program(source: &str) {
         &main_function,
         &builder,
         &printf_function,
+        &putchar_function,
         user_functions.clone(),
     );
 
