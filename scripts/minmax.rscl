@@ -1,6 +1,6 @@
 
-min(10, 20);
-max(10, 20);
+print(min(10, 20));
+print(max(10, 20));
 
 fn min(a, b) {
     if a < b {

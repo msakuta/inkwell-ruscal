@@ -7,5 +7,5 @@ fn hundred(a) {
     }
 }
 
-hundred(0);
-hundred(1);
+print(hundred(0));
+print(hundred(1));

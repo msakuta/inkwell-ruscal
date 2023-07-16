@@ -64,6 +64,21 @@ impl<'b, 'c> Compiler<'b, 'c, (), ()> {
     }
 }
 
+pub(crate) fn compile_print<'b, 'c>(compiler: &mut Compiler<'b, 'c, (), ()>) {
+    let function = compiler.user_functions.borrow()["print"];
+    let entry_basic_block = compiler.context.append_basic_block(function, "entry");
+    let builder = compiler.context.create_builder();
+    builder.position_at_end(entry_basic_block);
+    let fmt_string_ptr = builder.build_global_string_ptr("%f\n", "fmt-float");
+    let arg = function.get_first_param().unwrap().into_float_value();
+    builder.build_call(
+        *compiler.printf_function,
+        &[fmt_string_ptr.as_pointer_value().into(), arg.into()],
+        "call",
+    );
+    builder.build_return(None);
+}
+
 /// The first pass will compile the function definitions, while expression statements are skipped.
 /// This is because (apparently) LLVM segfaults when you try to run multiple builders at once,
 /// even in safe Rust.
@@ -94,7 +109,7 @@ where
             let mut subcompiler = compiler.convert(&function, &builder, arg_vals);
             let mut res = None;
             for stmt in stmts.iter() {
-                res = compile_print_statement(&mut subcompiler, stmt);
+                res = compile_expr_statement(&mut subcompiler, stmt);
             }
             builder.build_return(res.as_ref().map(|res| res as &dyn BasicValue));
             let mut user_functions = RefCell::borrow_mut(&compiler.user_functions);
@@ -105,7 +120,7 @@ where
 }
 
 /// The second pass compiles expressions, skipping function definitions.
-pub(crate) fn compile_print_statement<'b, 'c>(
+pub(crate) fn compile_expr_statement<'b, 'c>(
     compiler: &mut Compiler<'b, 'c, FunctionValue<'b>, Builder<'b>>,
     ast: &Statement,
 ) -> Option<FloatValue<'b>>
@@ -114,17 +129,17 @@ where
 {
     match ast {
         Statement::Expression(ex) => {
-            let hw_string_ptr = {
-                compiler
-                    .builder
-                    .build_global_string_ptr("Compiled: %f\n", "hw")
-            };
+            // let hw_string_ptr = {
+            //     compiler
+            //         .builder
+            //         .build_global_string_ptr("Compiled: %f\n", "hw")
+            // };
             let code = compile_expr(compiler, ex);
-            compiler.builder.build_call(
-                *compiler.printf_function,
-                &[hw_string_ptr.as_pointer_value().into(), code.into()],
-                "call",
-            );
+            // compiler.builder.build_call(
+            //     *compiler.printf_function,
+            //     &[hw_string_ptr.as_pointer_value().into(), code.into()],
+            //     "call",
+            // );
             Some(code)
         }
         Statement::VarDef(name, ex) => {

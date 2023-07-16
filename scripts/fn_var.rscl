@@ -3,4 +3,4 @@ fn add(a, b) {
     c;
 }
 
-add(123, 321);
+print(add(123, 321));
