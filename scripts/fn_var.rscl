@@ -1,0 +1,6 @@
+fn add(a, b) {
+    var c = a + b;
+    c;
+}
+
+add(123, 321);
