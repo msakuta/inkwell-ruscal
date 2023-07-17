@@ -25,7 +25,20 @@ Note that AST interpreter and bytecode are implemented in [Ruscal](https://githu
 | ------- | --------------- | ------------ | ------- | ------ | ----- |
 | Time [s] |  0.320          |      0.105   |  0.016  | 0.004 | 0.006 |
 
+Plot:
+
+![mandel-time](images/mandel-time.png)
+
+The output:
+
 ![mandel-llvm](images/mandel-llvm.png)
+
+## Reference implementations in C and Rust
+
+There are reference implementations of Mandelbrot set rendering in C and Rust for comparing performance which are named expectedly:
+
+* [mandel.c](mandel.c)
+* [mandel.rs](mandel.rs)
 
 You can build reference implementation of Mandelbrot set renderer in C with
 
